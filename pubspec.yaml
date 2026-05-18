@@ -1,0 +1,35 @@
+name: face_detector
+description: Flutter face detection app using Google ML Kit + MobileFaceNet verification.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Google ML Kit face detection
+  google_mlkit_face_detection: ^0.13.1
+
+  # Image picker (gallery + camera)
+  image_picker: ^1.1.2
+
+  # TFLite for running MobileFaceNet model
+  tflite_flutter: ^0.12.1
+
+  # Image processing / face crop preprocessing
+  image: ^4.1.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Bundle the MobileFaceNet TFLite model
+  assets:
+    - assets/models/facenet.tflite
