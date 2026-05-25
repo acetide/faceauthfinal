@@ -56,7 +56,7 @@ class FaceNetService {
   Future<void> init() async {
     try {
       _interpreter = await Interpreter.fromAsset(
-        'assets/models/mobile_face_net.tflite',
+        'assets/models/facenet.tflite',
         options: InterpreterOptions()..threads = 2,
       );
       _isReady = true;

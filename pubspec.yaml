@@ -22,6 +22,9 @@ dependencies:
   # Image processing / face crop preprocessing
   image: ^4.1.7
 
+  # HTTP client for API requests
+  dio: ^5.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

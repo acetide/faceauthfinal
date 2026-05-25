@@ -1,12 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'face_net_service.dart';
 import 'face_painter.dart';
+import 'services/api_service.dart';
+import 'package:dio/dio.dart';
 
 void main() {
   runApp(const FaceDetectorApp());
@@ -67,10 +71,12 @@ class _FaceDetectorScreenState extends State<FaceDetectorScreen> {
   // STATES
   // ─────────────────────────────────────────────────────────────
 
-  bool _loadingReference = true;
+  bool _loadingReference = false;
   bool _isProcessing = false;
 
   String? _errorMessage;
+
+  final TextEditingController _employeeKodeNikController = TextEditingController();
 
   // REFERENCE IMAGE
   File? _referenceFile;
@@ -95,11 +101,11 @@ class _FaceDetectorScreenState extends State<FaceDetectorScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeReference();
   }
 
   @override
   void dispose() {
+    _employeeKodeNikController.dispose();
     _faceDetector.close();
     _faceNet.dispose();
     super.dispose();
@@ -109,68 +115,60 @@ class _FaceDetectorScreenState extends State<FaceDetectorScreen> {
   // LOAD REFERENCE IMAGE FROM ASSETS
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> _initializeReference() async {
+  Future<void> _initializeReferenceFromFileApi() async {
+    setState(() {
+      _loadingReference = true;
+      _errorMessage = null;
+    });
+
     try {
+      final employeeKodeNik = _employeeKodeNikController.text.trim();
+      if (employeeKodeNik.isEmpty) {
+        throw Exception('Employee KodeNik is required.');
+      }
+
       await _faceNet.init();
 
-      // LOAD ASSET
-      final data = await rootBundle.load(
-        'assets/images/guy.jpg',
+      // Use Dio with JWT for authenticated request
+      final response = await ApiService().dio.get<List<int>>(
+        '/Api/Mobile/Portal/GetEmployeeFaceReference/$employeeKodeNik',
+        options: Options(responseType: ResponseType.bytes),
       );
 
-      final bytes = data.buffer.asUint8List();
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load reference from FILEAPI (${response.statusCode}): ${response.statusMessage}');
+      }
 
-      // CREATE TEMP FILE
+      final bytes = response.data!;
       final tempDir = Directory.systemTemp;
-
-      final tempFile = File('${tempDir.path}/reference.jpg');
-
+      final tempFile = File('${tempDir.path}/reference_$employeeKodeNik.jpg');
       await tempFile.writeAsBytes(bytes);
 
-      // FACE DETECTION
       final inputImage = InputImage.fromFilePath(tempFile.path);
-
       final faces = await _faceDetector.processImage(inputImage);
 
       if (faces.isEmpty) {
-        setState(() {
-          _errorMessage = 'No face found in assets/reference.jpg';
-          _loadingReference = false;
-        });
-
-        return;
+        throw Exception('No face found in FILEAPI reference image.');
       }
 
-      // CREATE EMBEDDING
-      final embedding = await _faceNet.embedFromImage(bytes, faces.first);
-
+      // Convert bytes to Uint8List for embedding and decoding
+      final uint8Bytes = Uint8List.fromList(bytes);
+      final embedding = await _faceNet.embedFromImage(uint8Bytes, faces.first);
       if (embedding == null) {
-        setState(() {
-          _errorMessage = 'Failed to create embedding from reference image.';
-          _loadingReference = false;
-        });
-
-        return;
+        throw Exception('Failed to create embedding from FILEAPI reference image.');
       }
 
-      // IMAGE SIZE
-      final decoded = await decodeImageFromList(bytes);
-
+      final decoded = await decodeImageFromList(uint8Bytes);
       setState(() {
         _referenceFile = tempFile;
         _referenceFaces = faces;
         _referenceEmbedding = embedding;
-
-        _imageSize = Size(
-          decoded.width.toDouble(),
-          decoded.height.toDouble(),
-        );
-
+        _imageSize = Size(decoded.width.toDouble(), decoded.height.toDouble());
         _loadingReference = false;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Initialization failed: $e';
+        _errorMessage = 'Reference load failed: $e';
         _loadingReference = false;
       });
     }
@@ -327,7 +325,28 @@ class _FaceDetectorScreenState extends State<FaceDetectorScreen> {
       ),
       body: Column(
         children: [
-          // LOADING
+          // REFERENCE LOADING
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _employeeKodeNikController,
+                    decoration: const InputDecoration(
+                      labelText: 'Employee KodeNik',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: _loadingReference ? null : _initializeReferenceFromFileApi,
+                  child: const Text('Load FILEAPI Reference'),
+                ),
+              ],
+            ),
+          ),
           if (_loadingReference)
             const Padding(
               padding: EdgeInsets.all(20),
@@ -335,7 +354,7 @@ class _FaceDetectorScreenState extends State<FaceDetectorScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 12),
-                  Text('Loading reference face...'),
+                  Text('Loading reference face from FILEAPI...'),
                 ],
               ),
             ),
