@@ -29,7 +29,186 @@ class FaceDetectorApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF6C63FF),
       ),
-      home: const FaceDetectorScreen(),
+      home: const LoginGateway(),
+    );
+  }
+}
+
+/// Login gateway - check if user is already logged in, otherwise show login
+class LoginGateway extends StatefulWidget {
+  const LoginGateway({super.key});
+
+  @override
+  State<LoginGateway> createState() => _LoginGatewayState();
+}
+
+class _LoginGatewayState extends State<LoginGateway> {
+  @override
+  void initState() {
+    super.initState();
+    _checkToken();
+  }
+
+  Future<void> _checkToken() async {
+    // Check if token exists in ApiService
+    final token = ApiService().dio.options.headers['Authorization'];
+    if (token != null) {
+      // User is already logged in, go to face verification
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const FaceDetectorScreen()),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Face Verification System',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SimpleLoginScreen()),
+                );
+              },
+              child: const Text('Login to Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Simple embedded login screen for this app
+class SimpleLoginScreen extends StatefulWidget {
+  const SimpleLoginScreen({super.key});
+
+  @override
+  State<SimpleLoginScreen> createState() => _SimpleLoginScreenState();
+}
+
+class _SimpleLoginScreenState extends State<SimpleLoginScreen> {
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  Future<void> _login() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await ApiService().dio.post(
+        '/Api/Mobile/Login',
+        data: {
+          'userName': _usernameController.text.trim(),
+          'password': _passwordController.text.trim(),
+        },
+      );
+
+      if (response.data['status'] == 'error') {
+        throw Exception(response.data['message'] ?? 'Login failed');
+      }
+
+      final String token = response.data['token'] as String;
+      ApiService().setToken(token);
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const FaceDetectorScreen()),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Login'),
+        centerTitle: true,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextField(
+              controller: _usernameController,
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_errorMessage != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _isLoading ? null : _login,
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Login'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
